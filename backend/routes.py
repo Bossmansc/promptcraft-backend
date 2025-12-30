@@ -5,16 +5,22 @@ from openai import OpenAI
 
 api_bp = Blueprint('api', __name__)
 
-# Initialize Client (DeepSeek uses OpenAI-compatible SDK)
-# API Key must be set in .env as DEEPSEEK_API_KEY
-client = None
-api_key = os.environ.get("DEEPSEEK_API_KEY")
-if api_key:
-    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+def get_ai_client():
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        return None
+    try:
+        # We explicitly disable proxies implicitly to avoid environment conflicts if needed,
+        # but usually just updating the library version fixes it.
+        return OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+    except Exception as e:
+        print(f"Warning: Failed to initialize AI client: {e}")
+        return None
 
 def generate_with_ai(user_input, stack_pref, style_pref):
+    client = get_ai_client()
     if not client:
-        return "Error: DEEPSEEK_API_KEY not configured on server.", "Error", "Error"
+        return "Error: DEEPSEEK_API_KEY not configured or Client init failed.", "Error", "Error"
 
     system_prompt = f"""
     You are 'CodeCraft AI', an expert software architect. 
@@ -43,8 +49,6 @@ def generate_with_ai(user_input, stack_pref, style_pref):
         )
         content = response.choices[0].message.content
         
-        # Simple extraction logic (AI usually follows format, but we fallback if needed)
-        # We assume the AI output is the prompt. We infer stack/style for the DB from the prompt text or user pref.
         final_stack = stack_pref if stack_pref != "Auto-Infer" else "AI Inferred"
         final_style = style_pref if style_pref != "Auto-Infer" else "AI Inferred"
         
@@ -61,7 +65,7 @@ Goal: {text}
 Stack: {stack}
 Style: {style}
 
-(DeepSeek API Key missing. Add DEEPSEEK_API_KEY to .env to enable AI generation.)""", stack, style
+(DeepSeek API Key missing or Client Error. Add DEEPSEEK_API_KEY to .env to enable AI generation.)""", stack, style
 
 @api_bp.route('/generate', methods=['POST'])
 def generate():
@@ -70,8 +74,11 @@ def generate():
     stack_pref = data.get('selectedStack', 'Auto-Infer')
     style_pref = data.get('selectedStyle', 'Auto-Infer')
     
+    # Try to generate with AI if key exists
     if os.environ.get("DEEPSEEK_API_KEY"):
         generated_text, stack, style = generate_with_ai(user_input, stack_pref, style_pref)
+        # If the AI function returned an error message starting with Error/API Error, allow fallback?
+        # For now, we accept the error message as the output.
     else:
         generated_text, stack, style = generate_fallback(user_input, stack_pref, style_pref)
     
