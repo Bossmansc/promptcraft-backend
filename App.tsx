@@ -1,3 +1,3 @@
-        $env:VITE_API_URL="https://your-render-app-name.onrender.com/api"
+        $env:VITE_API_URL="https://promptcraft-backend-02iq.onrender.com"
         npm run build
         
